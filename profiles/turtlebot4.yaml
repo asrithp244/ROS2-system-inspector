@@ -1,0 +1,185 @@
+# ============================================================================
+# TurtleBot4 Commissioning Specification
+# ROS2 Humble / iRobot Create3 + RPLidar A1 + OAK-D Lite
+# ============================================================================
+#
+# This profile validates the standard TurtleBot4 software stack.
+# Run after a fresh deployment to confirm the robot is ready for
+# autonomous navigation tasks.
+#
+# Usage:
+#   ros2_commissioning_check --profile turtlebot4
+# ============================================================================
+
+name: TurtleBot4 Standard Commissioning
+description: >
+  Validates Nav2, slam_toolbox, sensor drivers, and TF tree for a stock
+  TurtleBot4 running ROS2 Humble on Ubuntu 22.04.
+
+# Global timeouts (seconds).  Individual topic/tf entries can override these.
+defaults:
+  hz_timeout: 12.0      # time window to collect Hz measurements
+  echo_timeout: 6.0     # time to wait for a single message
+  tf_timeout: 6.0       # time to wait for a TF transform
+
+# ---------------------------------------------------------------------------
+# Required ROS2 nodes
+# ---------------------------------------------------------------------------
+nodes:
+  # Nav2 lifecycle nodes
+  - name: /bt_navigator
+  - name: /controller_server
+  - name: /planner_server
+  - name: /recoveries_server
+  - name: /waypoint_follower
+  - name: /map_server
+
+  # SLAM / localisation
+  - name: /slam_toolbox
+
+  # Sensor drivers
+  - name: /rplidar_node
+  - name: /oakd_node          # OAK-D Lite camera (depth + RGB)
+  - name: /turtlebot4_node    # Create3 base driver
+
+  # TF infrastructure
+  - name: /robot_state_publisher
+  - name: /joint_state_publisher
+
+  # Optional monitoring nodes — warn if absent but don't fail commissioning
+  - name: /rviz2
+    required: false
+  - name: /teleop_twist_keyboard
+    required: false
+
+# ---------------------------------------------------------------------------
+# Topics: Hz thresholds, message types, liveness
+# ---------------------------------------------------------------------------
+topics:
+  # --- LiDAR ---
+  - name: /scan
+    expected_type: sensor_msgs/msg/LaserScan
+    min_hz: 8.0          # RPLidar A1 spec: 5.5–10 Hz
+    warn_hz: 9.5          # advisory: should be near 10 Hz on a healthy unit
+    required: true
+    hz_timeout: 15.0      # longer window for first-spin stabilisation
+
+  # --- Depth camera (OAK-D Lite) ---
+  - name: /oakd/rgb/preview/image_raw
+    expected_type: sensor_msgs/msg/Image
+    min_hz: 10.0
+    required: true
+
+  - name: /oakd/stereo/image_raw
+    expected_type: sensor_msgs/msg/Image
+    min_hz: 10.0
+    required: true
+
+  - name: /oakd/stereo/camera_info
+    expected_type: sensor_msgs/msg/CameraInfo
+    min_hz: 10.0
+    required: true
+
+  - name: /oakd/nn/spatial_detections
+    expected_type: depthai_ros_msgs/msg/SpatialDetectionArray
+    required: false        # only present when a neural network pipeline is loaded
+
+  # --- Create3 odometry and IMU ---
+  - name: /odom
+    expected_type: nav_msgs/msg/Odometry
+    min_hz: 20.0
+    required: true
+
+  - name: /imu
+    expected_type: sensor_msgs/msg/Imu
+    min_hz: 50.0
+    required: true
+
+  - name: /battery_state
+    expected_type: sensor_msgs/msg/BatteryState
+    min_hz: 0.5
+    required: true
+    hz_timeout: 20.0       # battery topic publishes slowly
+
+  # --- Velocity command ---
+  - name: /cmd_vel
+    expected_type: geometry_msgs/msg/Twist
+    # No Hz threshold — presence of publisher (echo) is sufficient
+    required: true
+
+  # --- Nav2 outputs ---
+  - name: /map
+    expected_type: nav_msgs/msg/OccupancyGrid
+    # Map updates at ~1 Hz during active SLAM
+    min_hz: 0.2
+    required: true
+    hz_timeout: 20.0
+
+  - name: /global_costmap/costmap
+    expected_type: nav_msgs/msg/OccupancyGrid
+    required: true
+
+  - name: /local_costmap/costmap
+    expected_type: nav_msgs/msg/OccupancyGrid
+    required: true
+
+  - name: /plan
+    expected_type: nav_msgs/msg/Path
+    required: false        # only published after a navigation goal is sent
+
+  # --- TF topics ---
+  - name: /tf
+    expected_type: tf2_msgs/msg/TFMessage
+    min_hz: 20.0
+    required: true
+
+  - name: /tf_static
+    expected_type: tf2_msgs/msg/TFMessage
+    required: true
+
+# ---------------------------------------------------------------------------
+# TF frame connectivity
+# All pairs must be resolvable through the tf2 tree simultaneously.
+# ---------------------------------------------------------------------------
+tf_pairs:
+  # Core mobile base chain
+  - parent: odom
+    child: base_footprint
+    required: true
+
+  - parent: base_footprint
+    child: base_link
+    required: true
+
+  - parent: base_link
+    child: laser_frame
+    required: true
+
+  # Camera frame chain
+  - parent: base_link
+    child: oakd_link
+    required: true
+
+  - parent: oakd_link
+    child: oakd_rgb_camera_optical_frame
+    required: true
+
+  - parent: oakd_link
+    child: oakd_left_camera_optical_frame
+    required: true
+
+  # Map → odom → base (full navigation chain)
+  - parent: map
+    child: odom
+    required: true
+    timeout: 10.0          # slam_toolbox may take a moment to emit map→odom
+
+  - parent: map
+    child: base_link
+    required: true
+    timeout: 10.0
+
+  # IMU frame
+  - parent: base_link
+    child: imu_link
+    required: true

@@ -1,0 +1,144 @@
+# ============================================================================
+# 6-DOF Manipulator Commissioning Specification
+# ROS2 Humble / MoveIt2 / ros2_control
+# ============================================================================
+#
+# Generic profile for a 6-DOF serial manipulator running ros2_control
+# with a joint trajectory controller and MoveIt2 move_group.
+#
+# Adapt node names to your robot's URDF and controller manager config.
+#
+# Usage:
+#   ros2_commissioning_check --profile manipulator
+# ============================================================================
+
+name: 6-DOF Manipulator — MoveIt2 Commissioning
+description: >
+  Validates ros2_control joint trajectory controller, MoveIt2 move_group,
+  joint state publisher, and TF chain from base_link to tool0 for a
+  6-DOF serial manipulator.
+
+defaults:
+  hz_timeout: 10.0
+  echo_timeout: 5.0
+  tf_timeout: 5.0
+
+# ---------------------------------------------------------------------------
+# Required nodes
+# ---------------------------------------------------------------------------
+nodes:
+  # ros2_control infrastructure
+  - name: /controller_manager
+  - name: /joint_state_broadcaster
+
+  # Joint trajectory controller (common name — adjust to your config)
+  - name: /joint_trajectory_controller
+
+  # MoveIt2
+  - name: /move_group
+
+  # Robot description
+  - name: /robot_state_publisher
+
+  # Optional: servo node for real-time Cartesian control
+  - name: /servo_node
+    required: false
+
+  # Optional: force-torque sensor driver
+  - name: /fts_broadcaster
+    required: false
+
+# ---------------------------------------------------------------------------
+# Topics
+# ---------------------------------------------------------------------------
+topics:
+  # Joint states — must publish at controller rate
+  - name: /joint_states
+    expected_type: sensor_msgs/msg/JointState
+    min_hz: 100.0          # typical ros2_control rate
+    warn_hz: 120.0
+    required: true
+
+  # Controller output
+  - name: /joint_trajectory_controller/state
+    expected_type: control_msgs/msg/JointTrajectoryControllerState
+    min_hz: 100.0
+    required: true
+
+  # MoveIt2 planning scene
+  - name: /monitored_planning_scene
+    expected_type: moveit_msgs/msg/PlanningScene
+    required: true
+
+  # TF streams
+  - name: /tf
+    expected_type: tf2_msgs/msg/TFMessage
+    min_hz: 50.0
+    required: true
+
+  - name: /tf_static
+    expected_type: tf2_msgs/msg/TFMessage
+    required: true
+
+  # Optional: force-torque sensor
+  - name: /force_torque_sensor_broadcaster/wrench
+    expected_type: geometry_msgs/msg/WrenchStamped
+    min_hz: 100.0
+    required: false
+
+  # Optional: end-effector camera
+  - name: /wrist_camera/image_raw
+    expected_type: sensor_msgs/msg/Image
+    min_hz: 15.0
+    required: false
+
+# ---------------------------------------------------------------------------
+# TF frame connectivity
+# Validates the full kinematic chain from world → tool0
+# ---------------------------------------------------------------------------
+tf_pairs:
+  # World → robot base
+  - parent: world
+    child: base_link
+    required: true
+
+  # Kinematic chain — joint-by-joint
+  - parent: base_link
+    child: link_1
+    required: true
+
+  - parent: link_1
+    child: link_2
+    required: true
+
+  - parent: link_2
+    child: link_3
+    required: true
+
+  - parent: link_3
+    child: link_4
+    required: true
+
+  - parent: link_4
+    child: link_5
+    required: true
+
+  - parent: link_5
+    child: link_6
+    required: true
+
+  # Tool / end-effector frame
+  - parent: link_6
+    child: tool0
+    required: true
+
+  # Full chain shortcut — most critical single check
+  - parent: world
+    child: tool0
+    required: true
+    timeout: 8.0
+
+  # Optional: wrist camera mounted on end-effector
+  - parent: tool0
+    child: wrist_camera_link
+    required: false
