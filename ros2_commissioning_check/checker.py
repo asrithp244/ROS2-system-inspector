@@ -472,7 +472,7 @@ async def check_topic_echo(spec: TopicSpec, semaphore: asyncio.Semaphore) -> Che
 # TF check  (`ros2 run tf2_ros tf2_echo`)
 # ---------------------------------------------------------------------------
 
-_TF_TRANSLATION_RE = re.compile(r"Translation:\s*\((.+?)\)", re.DOTALL)
+_TF_TRANSLATION_RE = re.compile(r"Translation:\s*[\(\[](.+?)[\)\]]", re.DOTALL)
 _TF_AT_TIME_RE = re.compile(r"At time [\d.]+")
 
 
