@@ -182,8 +182,10 @@ async def check_topic_hz(spec: TopicSpec, semaphore: asyncio.Semaphore) -> Check
     async with semaphore:
         # --window 10: print after every 10 messages so we get at least one
         # reading even with DDS discovery overhead eating into the timeout.
+        # stdbuf -oL forces line-buffered stdout so Hz output is flushed
+        # immediately even when piped (Python buffers by default when not a tty).
         rc, stdout, stderr = await _run(
-            ["ros2", "topic", "hz", "--window", "10", spec.name],
+            ["stdbuf", "-oL", "ros2", "topic", "hz", "--window", "10", spec.name],
             timeout=spec.hz_timeout,
         )
 
