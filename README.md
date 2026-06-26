@@ -2,7 +2,7 @@
 
 A CLI tool that validates a running ROS2 system against a YAML spec file. Runs on **ROS2 Humble / Ubuntu 22.04**.
 
-Checks node presence, topic publish rates, message types, topic liveness, and TF frame connectivity — all concurrently — then outputs a Markdown report with a `PASS` / `PARTIAL` / `FAIL` verdict.
+Checks node presence, topic publish rates, message types, topic liveness, and TF frame connectivity, all concurrently, then outputs a Markdown report with a `PASS` / `PARTIAL` / `FAIL` verdict.
 
 ```bash
 ros2_commissioning_check --profile turtlebot4 --output report.md --verbose
@@ -27,7 +27,7 @@ ros2_commissioning_check --profile turtlebot4 --output report.md --verbose
 
 ## When to Use This
 
-Useful any time you need to confirm a ROS2 system is healthy — after a fresh deployment, before handing off to a customer, or as a smoke test in CI against a Gazebo simulation. The Markdown report gives you something concrete to attach to a commissioning sign-off.
+Useful any time you need to confirm a ROS2 system is healthy, after a fresh deployment, before handing off to a customer, or as a smoke test in CI against a Gazebo simulation. The Markdown report gives you something concrete to attach to a commissioning sign-off.
 
 ---
 
@@ -65,13 +65,13 @@ pip install -e . --break-system-packages
 
 No real hardware needed. `demo/demo_system.py` spins up fake publishers for all topics in `profiles/demo.yaml`.
 
-**Terminal 1 — start the fake system:**
+**Terminal 1, start the fake system:**
 ```bash
 source /opt/ros/humble/setup.bash
 python3 demo/demo_system.py
 ```
 
-**Terminal 2 — run the check:**
+**Terminal 2, run the check:**
 ```bash
 source ~/ros2_ws/install/setup.bash
 ros2_commissioning_check --profile demo --verbose
@@ -114,7 +114,7 @@ ros2_commissioning_check --profile turtlebot4 --output report.md --verbose
 # Use a custom spec
 ros2_commissioning_check --profile /path/to/my_robot.yaml --verbose
 
-# CI — exit code tells you pass/fail
+# CI, exit code tells you pass/fail
 ros2_commissioning_check --profile turtlebot4 --output report.md
 echo "Exit: $?"   # 0=PASS 1=PARTIAL 2=FAIL
 ```
@@ -162,14 +162,14 @@ tf_pairs:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | — | Full node name (`/` prefix optional) |
+| `name` | string | required | Full node name (`/` prefix optional) |
 | `required` | bool | `true` | If `false`, absence is WARN not FAIL |
 
 #### `topics[]`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | — | Full topic name |
+| `name` | string | required | Full topic name |
 | `min_hz` | float | null | FAIL if measured rate is below this |
 | `warn_hz` | float | null | WARN if below this (must be ≥ min_hz) |
 | `expected_type` | string | null | e.g. `sensor_msgs/msg/LaserScan` |
@@ -181,8 +181,8 @@ tf_pairs:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `parent` | string | — | Parent TF frame |
-| `child` | string | — | Child TF frame |
+| `parent` | string | required | Parent TF frame |
+| `child` | string | required | Child TF frame |
 | `required` | bool | `true` | If `false`, missing transform is WARN |
 | `timeout` | float | 5.0 | Seconds to wait for tf2_echo output |
 
@@ -203,7 +203,7 @@ tf_pairs:
 See `demo/sample_output.md` for a real PASS run. Below is an example FAIL run showing what the report looks like when a sensor and a TF frame are down.
 
 ```markdown
-# ROS2 Commissioning Report — TurtleBot4 Standard Commissioning
+# ROS2 Commissioning Report: TurtleBot4 Standard Commissioning
 
 > **Profile:** `profiles/turtlebot4.yaml`
 > **ROS Distro:** humble
@@ -223,7 +223,7 @@ See `demo/sample_output.md` for a real PASS run. Below is an example FAIL run sh
 | Topic   | Required | Expected           | Measured | Status  | Notes                     |
 |---------|----------|--------------------|----------|---------|---------------------------|
 | `/scan` | Yes      | ≥8.0 Hz (required) | 3.21 Hz  | ❌ FAIL | Rate below minimum 8.0 Hz |
-| `/odom` | Yes      | ≥20.0 Hz (required)| 31.44 Hz | ✅ PASS | —                         |
+| `/odom` | Yes      | ≥20.0 Hz (required)| 31.44 Hz | ✅ PASS |                          |
 
 ## 🌐 TF Frame Connectivity
 
@@ -288,7 +288,7 @@ All checks run concurrently via `asyncio.gather()`. An `asyncio.Semaphore` caps 
 ## Known Limitations
 
 - Tested on **ROS2 Humble only**. Iron/Jazzy should work but haven't been tested.
-- Hz measurements have some jitter on VMs or low-resource machines — set `min_hz` conservatively.
+- Hz measurements have some jitter on VMs or low-resource machines, set `min_hz` conservatively.
 - `ros2 topic echo --once` liveness check can rarely pick up a ROS warning line as a message. Doesn't affect Hz-checked topics since those skip the echo check.
 
 ---
