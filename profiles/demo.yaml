@@ -10,9 +10,9 @@ description: >
   Use this profile to show PASS output for portfolio / interview demos.
 
 defaults:
-  hz_timeout: 8.0
+  hz_timeout: 15.0
   echo_timeout: 5.0
-  tf_timeout: 5.0
+  tf_timeout: 10.0
 
 nodes:
   - name: /demo_system
