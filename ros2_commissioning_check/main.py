@@ -276,14 +276,23 @@ def main() -> None:
     # -------------------------------------------------------------------------
     report = _make_report(spec, profile_path)
 
-    asyncio.run(
-        run_checks(
-            spec=spec,
-            report=report,
-            concurrency=args.concurrency,
-            verbose=args.verbose,
+    # Use explicit loop lifecycle to suppress asyncio subprocess cleanup noise
+    # on Python 3.10 (RuntimeError: Event loop is closed on __del__).
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            run_checks(
+                spec=spec,
+                report=report,
+                concurrency=args.concurrency,
+                verbose=args.verbose,
+            )
         )
-    )
+        loop.run_until_complete(asyncio.sleep(0.1))  # flush pending callbacks
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
 
     # -------------------------------------------------------------------------
     # Render and output the Markdown report

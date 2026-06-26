@@ -1,0 +1,70 @@
+# ============================================================================
+# Demo commissioning spec — works without real hardware.
+# Run demo/demo_system.py first, then:
+#   ros2_commissioning_check --profile demo --verbose
+# ============================================================================
+
+name: Demo System — No Hardware Required
+description: >
+  Minimal spec that validates against demo_system.py fake publishers.
+  Use this profile to show PASS output for portfolio / interview demos.
+
+defaults:
+  hz_timeout: 8.0
+  echo_timeout: 5.0
+  tf_timeout: 5.0
+
+nodes:
+  - name: /demo_system
+
+topics:
+  - name: /scan
+    expected_type: sensor_msgs/msg/LaserScan
+    min_hz: 8.0
+    required: true
+
+  - name: /odom
+    expected_type: nav_msgs/msg/Odometry
+    min_hz: 20.0
+    required: true
+
+  - name: /imu
+    expected_type: sensor_msgs/msg/Imu
+    min_hz: 50.0
+    required: true
+
+  - name: /battery_state
+    expected_type: sensor_msgs/msg/BatteryState
+    min_hz: 0.5
+    required: true
+    hz_timeout: 12.0
+
+  - name: /cmd_vel
+    expected_type: geometry_msgs/msg/Twist
+    required: true
+
+  - name: /tf
+    expected_type: tf2_msgs/msg/TFMessage
+    min_hz: 20.0
+    required: true
+
+tf_pairs:
+  - parent: odom
+    child: base_footprint
+    required: true
+
+  - parent: map
+    child: odom
+    required: true
+
+  - parent: base_footprint
+    child: base_link
+    required: true
+
+  - parent: base_link
+    child: laser_frame
+    required: true
+
+  - parent: base_link
+    child: imu_link
+    required: true
