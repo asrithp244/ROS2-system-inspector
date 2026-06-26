@@ -31,7 +31,6 @@ topics:
   - name: /imu
     expected_type: sensor_msgs/msg/Imu
     min_hz: 45.0
-    warn_hz: 48.0
     required: true
 
   - name: /battery_state

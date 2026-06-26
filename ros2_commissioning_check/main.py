@@ -19,6 +19,11 @@ import argparse
 import asyncio
 import os
 import sys
+import warnings
+
+# Suppress the "RuntimeError: Event loop is closed" spam from Python 3.10's
+# asyncio subprocess transport __del__ running after the event loop closes.
+warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
