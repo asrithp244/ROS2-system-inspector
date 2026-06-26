@@ -14,10 +14,10 @@ the ROS2 daemon.
 
 Subprocess timeout semantics
 -----------------------------
-A SIGKILL is sent to the child process on timeout.  `ros2 topic hz` is
-intentionally run for the full hz_timeout window so that we can accumulate
-enough messages for an accurate average; the output is parsed after the
-process terminates.
+A SIGKILL is sent to the child process on timeout.  `ros2 topic hz` and
+`tf2_echo` are intentionally run for the full timeout window so we accumulate
+enough output before killing; we use streaming line-by-line reads so that
+output printed before the kill is not lost.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
-# Force unbuffered output from ros2 CLI subprocesses so Hz data is flushed
-# before we kill the process at timeout (Python buffers stdout when piped).
+# Force unbuffered output from ros2 CLI subprocesses so output is flushed
+# immediately even when piped (Python buffers stdout when not a tty).
 _SUBPROCESS_ENV = {**os.environ, "PYTHONUNBUFFERED": "1"}
 
 from .models import CheckResult, NodeSpec, Status, TFSpec, TopicSpec
@@ -44,11 +44,15 @@ async def _run(
     stdin_data: Optional[bytes] = None,
 ) -> Tuple[int, str, str]:
     """
-    Run *cmd* as a subprocess, capturing stdout/stderr.
+    Run *cmd* as a subprocess, capturing stdout/stderr via communicate().
 
     Returns (returncode, stdout, stderr).
     returncode == -1 on timeout; stderr will contain "TIMEOUT".
     returncode == -2 on OSError (e.g. ros2 not on PATH).
+
+    Use this for commands that exit quickly (node list, topic info, etc.).
+    For long-running commands that need to be killed on timeout, use
+    _run_streaming() so output printed before the kill is not lost.
     """
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -71,6 +75,65 @@ async def _run(
             except ProcessLookupError:
                 pass
             return -1, "", "TIMEOUT"
+    except OSError as exc:
+        return -2, "", str(exc)
+
+
+async def _run_streaming(
+    cmd: list[str],
+    timeout: float,
+) -> Tuple[int, str, str]:
+    """
+    Run *cmd* as a subprocess, reading stdout line-by-line as output arrives.
+
+    Unlike _run(), this captures output printed BEFORE the process is killed
+    on timeout — critical for `ros2 topic hz` and `tf2_echo` which we
+    intentionally kill after a measurement window.
+
+    Returns (returncode, stdout, stderr).
+    returncode == -1 on timeout.
+    returncode == -2 on OSError.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=_SUBPROCESS_ENV,
+        )
+
+        stdout_lines: List[str] = []
+
+        async def _drain_stdout() -> None:
+            assert proc.stdout is not None
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                stdout_lines.append(line.decode(errors="replace"))
+
+        timed_out = False
+        try:
+            await asyncio.wait_for(_drain_stdout(), timeout=timeout)
+        except asyncio.TimeoutError:
+            timed_out = True
+            try:
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
+
+        # Drain stderr (best-effort, short timeout)
+        stderr_b = b""
+        try:
+            assert proc.stderr is not None
+            stderr_b = await asyncio.wait_for(proc.stderr.read(), timeout=2.0)
+        except asyncio.TimeoutError:
+            pass
+
+        rc = -1 if timed_out else (proc.returncode or 0)
+        return rc, "".join(stdout_lines), stderr_b.decode(errors="replace")
+
     except OSError as exc:
         return -2, "", str(exc)
 
@@ -180,12 +243,12 @@ async def check_topic_hz(spec: TopicSpec, semaphore: asyncio.Semaphore) -> Check
         )
 
     async with semaphore:
-        # --window 10: print after every 10 messages so we get at least one
-        # reading even with DDS discovery overhead eating into the timeout.
-        # stdbuf -oL forces line-buffered stdout so Hz output is flushed
-        # immediately even when piped (Python buffers by default when not a tty).
-        rc, stdout, stderr = await _run(
-            ["stdbuf", "-oL", "ros2", "topic", "hz", "--window", "10", spec.name],
+        # --window 10: emit a reading after every 10 messages so we get at
+        # least one result even with DDS discovery overhead eating into the
+        # timeout.  _run_streaming() reads line-by-line so output printed
+        # before we kill the process on timeout is not lost.
+        rc, stdout, stderr = await _run_streaming(
+            ["ros2", "topic", "hz", "--window", "10", spec.name],
             timeout=spec.hz_timeout,
         )
 
@@ -422,7 +485,9 @@ async def check_tf_pair(spec: TFSpec, semaphore: asyncio.Semaphore) -> CheckResu
     check_name = f"{spec.parent} → {spec.child}"
 
     async with semaphore:
-        rc, stdout, stderr = await _run(
+        # _run_streaming() so "At time" lines printed before we kill the
+        # process on timeout are captured (communicate() would discard them).
+        rc, stdout, stderr = await _run_streaming(
             ["ros2", "run", "tf2_ros", "tf2_echo", spec.parent, spec.child],
             timeout=spec.timeout,
         )
