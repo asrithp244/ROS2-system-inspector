@@ -37,7 +37,12 @@ from .reporter import render_report
 # Constants
 # ---------------------------------------------------------------------------
 
-PROFILES_DIR = Path(__file__).parent.parent / "profiles"
+try:
+    from ament_index_python.packages import get_package_share_directory
+    PROFILES_DIR = Path(get_package_share_directory("ros2_commissioning_check")) / "profiles"
+except (ImportError, KeyError):
+    # Fallback for development / non-colcon installs
+    PROFILES_DIR = Path(__file__).parent.parent / "profiles"
 DEFAULT_CONCURRENCY = 8   # max concurrent subprocess invocations
 DEFAULT_NODE_TIMEOUT = 5.0
 
