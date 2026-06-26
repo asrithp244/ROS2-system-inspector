@@ -23,8 +23,13 @@ process terminates.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from typing import Optional, Tuple
+
+# Force unbuffered output from ros2 CLI subprocesses so Hz data is flushed
+# before we kill the process at timeout (Python buffers stdout when piped).
+_SUBPROCESS_ENV = {**os.environ, "PYTHONUNBUFFERED": "1"}
 
 from .models import CheckResult, NodeSpec, Status, TFSpec, TopicSpec
 
@@ -51,6 +56,7 @@ async def _run(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE if stdin_data else None,
+            env=_SUBPROCESS_ENV,
         )
         try:
             stdout_b, stderr_b = await asyncio.wait_for(
